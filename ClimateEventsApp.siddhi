@@ -1,0 +1,37 @@
+@App:name("ClimateEventsApp")
+
+
+@source(type = 'http', receiver.url = "http://localhost:8081/climateStream", 
+    @map(type = 'json'))
+@sink(type = 'log')
+define stream WeatherInput (timestamp string, event_id string, event_type string, location string, impact_level string, source string, temperature float, wind_speed float,  precipitation float, description string, status string);
+
+@sink(type='http', 
+      publisher.url= 'http://127.0.0.1:8080/engine-rest/message', 
+      headers= "'Host:127.0.0.1:8080'",
+      @map(type='json', @payload("""{"messageName":"{{messageName}}", "processInstanceId":"{{processInstanceId}}" }""")))
+@sink(type = 'log') 
+define stream MessageStream(processInstanceId string, messageName string);
+
+@sink(type='http' , 
+      publisher.url= 'http://127.0.0.1:8080/engine-rest/message', 
+      headers= "'Host:127.0.0.1:8080'",
+      @map(type='json', @payload("""{"messageName":"{{messageName}}", "all": true}""")))
+@sink(type = 'log') 
+define stream MessageStream2(messageName string);
+
+@source(type = 'http', reciever.url= '¨http://localhost:8081/req_impact_level', @map(type='json'))
+@sink(type='log')
+define stream CamundaInput(impact_level string, processInstanceID string);
+
+from CamundaInput[impact_level == "HIGH"]
+select  "HIGH" as messageName
+insert into MessageStream2;
+
+from CamundaInput[impact_level != "HIGH"]
+select  "NOT HIGH" as messageName
+insert into MessageStream2;
+
+from WeatherInput
+select  event_id as processInstanceId, 'accident' as messageName
+insert  into MessageStream;
